@@ -1,0 +1,29 @@
+name: Daily Job Search
+
+# schedule: 30 6 * * * -> runs at 06:30 UTC = 12:00 IST
+on:
+  schedule:
+    - cron: '30 6 * * *'
+  workflow_dispatch: # allows manual run from Actions UI
+
+jobs:
+  run-job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run job script
+        env:
+          SERP_API_KEY: ${{ secrets.SERP_API_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL: ${{ secrets.EMAIL }}
+        run: node jobSearch.js
