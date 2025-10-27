@@ -1,62 +1,97 @@
 import cron from "node-cron";
-import nodemailer from "nodemailer";
 import axios from "axios";
+import { Resend } from "resend";
+import dotenv from "dotenv";
 
-const SERP_API_KEY = "02ba8343cc786ddbd22532fac1e0cbd7ab51a986c1632eee97d754ccb337531c";
-const EMAIL = "nikhilnikki558@gmail.com";
-const APP_PASSWORD = "rizo rgkr xdky poic";
+dotenv.config();
+
+// --- Environment Variables ---
+const SERP_API_KEY = process.env.SERP_API_KEY;
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const EMAIL = process.env.EMAIL;
+
+// --- Initialize Resend client ---
+const resend = new Resend(RESEND_API_KEY);
 
 async function searchJobs() {
   console.log("🔍 Searching jobs...");
 
-  const query = "React OR MERN stack developer 4 years experience job India";
-  const url = `https://serpapi.com/search.json?q=${encodeURIComponent(query)}&engine=google_jobs&api_key=${SERP_API_KEY}`;
+  try {
+    const query = "React OR MERN stack developer 4 years experience job India";
+    const url = `https://serpapi.com/search.json?q=${encodeURIComponent(
+      query
+    )}&engine=google_jobs&api_key=${SERP_API_KEY}`;
 
-  const { data } = await axios.get(url);
-  console.log(data.jobs_results.length)
+    const { data } = await axios.get(url);
+    const jobs = data.jobs_results || [];
 
-  if (!data.jobs_results || data.jobs_results.length === 0) {
-    console.log("⚠️ No jobs found today.");
-    return "No jobs found today.";
+    if (jobs.length === 0) {
+      console.log("⚠️ No jobs found today.");
+      return "<p>No jobs found today.</p>";
+    }
+
+    console.log(`✅ Found ${jobs.length} jobs`);
+
+    const htmlList = jobs
+      .slice(0, 10)
+      .map((job, index) => {
+        const title = job.title || "No title";
+        const company = job.company_name || "Unknown company";
+        const link = job.share_link || "#";
+
+        return `
+          <div style="margin-bottom: 16px; border-bottom: 1px solid #ddd; padding-bottom: 10px;">
+            <b>${index + 1}. ${title}</b><br>
+            <i>${company}</i><br>
+            <a href="${link}" target="_blank">🔗 View Job</a>
+          </div>
+        `;
+      })
+      .join("");
+
+    return htmlList;
+  } catch (err) {
+    console.error("❌ Error fetching jobs:", err.message);
+    return `<p>Error fetching jobs: ${err.message}</p>`;
   }
-
-  const jobs = data.jobs_results.slice(0, 10);
-  const htmlList = jobs
-    .map((job) => {
-      return `<p><b>${job.title}</b><br>${job.company_name}<br><a href="${job.share_link}">${job.share_link}</a></p>`;
-    })
-    .join("");
-
-  return htmlList;
 }
 
 async function sendEmail(htmlBody) {
-  const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: EMAIL,
-      pass: APP_PASSWORD,
-    },
-  });
+  try {
+    await resend.emails.send({
+      from: "Daily Jobs <onboarding@resend.dev>", // Or use your verified domain later
+      to: EMAIL,
+      subject: "🧑‍💻 Daily React/MERN Job Updates",
+      html: `
+        <div style="font-family: Arial, sans-serif; color: #333;">
+          <h2>🔥 Today's Job Results</h2>
+          ${htmlBody}
+          <p style="margin-top: 20px; font-size: 12px; color: gray;">
+            — Automated job search powered by SerpAPI + Resend
+          </p>
+        </div>
+      `,
+    });
 
-  await transporter.sendMail({
-    from: EMAIL,
-    to: EMAIL,
-    subject: "🧑‍💻 Daily React/MERN Job Updates",
-    html: `<h2>Today's Job Results</h2>${htmlBody}`,
-  });
-
-  console.log("📧 Email sent successfully!");
+    console.log("📧 Email sent successfully via Resend!");
+  } catch (err) {
+    console.error("❌ Error sending email:", err.message);
+  }
 }
 
-// Run every day at 12 PM (server time)
-cron.schedule("0 12 * * *", async () => {
-  const results = await searchJobs();
-  await sendEmail(results);
-  console.log("✅ Task done for the day");
-});
+// 🕒 Schedule to run every day at 12 PM (IST)
+cron.schedule(
+  "0 12 * * *",
+  async () => {
+    console.log("⏰ Running daily job search...");
+    const results = await searchJobs();
+    await sendEmail(results);
+    console.log("✅ Task done for the day");
+  },
+  { timezone: "Asia/Kolkata" }
+);
 
-// Optional: run once immediately for testing
+// 🔥 Run immediately for testing (you can remove later)
 (async () => {
   const results = await searchJobs();
   await sendEmail(results);
