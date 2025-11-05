@@ -27,22 +27,29 @@ function saveCache(cache) {
   fs.writeFileSync(CACHE_FILE, JSON.stringify(cache.slice(-300), null, 2));
 }
 
-// 🧮 Extract platform name from link
-function extractPlatform(link, source) {
-  if (source) return source; // use SerpAPI's source if available
+// 🧮 Extract real platform from apply link
+function extractPlatform(job) {
+  const applyLink =
+    job.apply_options?.[0]?.link || job.apply_link || job.share_link || "";
+  if (!applyLink) return "Unknown Source";
+
   try {
-    const url = new URL(link);
-    const domain = url.hostname.replace("www.", "");
+    const url = new URL(applyLink);
+    const domain = url.hostname.replace("www.", "").toLowerCase();
+
     if (domain.includes("linkedin")) return "LinkedIn";
     if (domain.includes("indeed")) return "Indeed";
     if (domain.includes("naukri")) return "Naukri";
     if (domain.includes("glassdoor")) return "Glassdoor";
     if (domain.includes("foundit")) return "Foundit (Monster)";
-    if (domain.includes("timesjobs")) return "TimesJobs";
     if (domain.includes("hirist")) return "Hirist";
     if (domain.includes("angel")) return "AngelList";
+    if (domain.includes("timesjobs")) return "TimesJobs";
+    if (domain.includes("instahyre")) return "Instahyre";
     if (domain.includes("google")) return "Google Jobs";
-    return domain.split(".")[0]; // fallback
+    if (domain.includes("turing")) return "Turing";
+    if (domain.includes("remoteok")) return "RemoteOK";
+    return domain.split(".")[0]; // fallback (e.g., careers.tcs.com -> "careers")
   } catch {
     return "Unknown Source";
   }
@@ -76,7 +83,7 @@ async function sendEmail(htmlBody) {
     subject: "🧑‍💻 Fresh React/MERN Job Updates",
     html: `<h2>Latest Job Openings</h2>${htmlBody}`,
   });
-  console.log("📧 Email sent successfully!");
+  console.log("📧 Email sent successfully via Resend!");
 }
 
 // 🚀 Main
@@ -98,9 +105,11 @@ async function sendEmail(htmlBody) {
 
     const htmlList = newJobs
       .map((job) => {
-        const platform = extractPlatform(job.share_link, job.job_source);
+        const platform = extractPlatform(job);
         const posted =
           job.detected_extensions?.posted_at || "Recently posted";
+        const link =
+          job.apply_options?.[0]?.link || job.share_link || "#";
 
         return `
         <div style="margin-bottom:16px;padding:10px;border-bottom:1px solid #ddd;">
@@ -108,7 +117,7 @@ async function sendEmail(htmlBody) {
           <p><b>${job.company_name}</b></p>
           <p>🗓️ ${posted}</p>
           <p>📍 Platform: <b>${platform}</b></p>
-          <p><a href="${job.share_link}" target="_blank">🔗 Apply Now</a></p>
+          <p><a href="${link}" target="_blank">🔗 Apply Now</a></p>
         </div>
       `;
       })
