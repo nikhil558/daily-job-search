@@ -27,11 +27,32 @@ function saveCache(cache) {
   fs.writeFileSync(CACHE_FILE, JSON.stringify(cache.slice(-300), null, 2));
 }
 
+// 🧮 Extract platform name from link
+function extractPlatform(link, source) {
+  if (source) return source; // use SerpAPI's source if available
+  try {
+    const url = new URL(link);
+    const domain = url.hostname.replace("www.", "");
+    if (domain.includes("linkedin")) return "LinkedIn";
+    if (domain.includes("indeed")) return "Indeed";
+    if (domain.includes("naukri")) return "Naukri";
+    if (domain.includes("glassdoor")) return "Glassdoor";
+    if (domain.includes("foundit")) return "Foundit (Monster)";
+    if (domain.includes("timesjobs")) return "TimesJobs";
+    if (domain.includes("hirist")) return "Hirist";
+    if (domain.includes("angel")) return "AngelList";
+    if (domain.includes("google")) return "Google Jobs";
+    return domain.split(".")[0]; // fallback
+  } catch {
+    return "Unknown Source";
+  }
+}
+
 // 🔍 Fetch jobs
 async function searchJobs() {
   console.log("🔍 Searching jobs...");
 
-  // fetch jobs from last 3 days (not only today)
+  // Fetch jobs from last 3 days
   const date = new Date();
   date.setDate(date.getDate() - 3);
   const since = date.toISOString().split("T")[0];
@@ -64,12 +85,10 @@ async function sendEmail(htmlBody) {
     const cache = loadCache();
     const jobs = await searchJobs();
 
-    // Filter out already emailed jobs using share_link (more unique)
     let newJobs = jobs.filter(
       (job) => !cache.includes(job.share_link || job.title)
     );
 
-    // If no new jobs, still send top 3 as a fallback
     if (newJobs.length === 0) {
       console.log("🟡 No brand new jobs, sending top 3 recent instead...");
       newJobs = jobs.slice(0, 3);
@@ -78,16 +97,21 @@ async function sendEmail(htmlBody) {
     }
 
     const htmlList = newJobs
-      .map(
-        (job) => `
+      .map((job) => {
+        const platform = extractPlatform(job.share_link, job.job_source);
+        const posted =
+          job.detected_extensions?.posted_at || "Recently posted";
+
+        return `
         <div style="margin-bottom:16px;padding:10px;border-bottom:1px solid #ddd;">
           <h3>${job.title}</h3>
           <p><b>${job.company_name}</b></p>
-          <p><i>${job.detected_extensions?.posted_at || "Recently posted"}</i></p>
+          <p>🗓️ ${posted}</p>
+          <p>📍 Platform: <b>${platform}</b></p>
           <p><a href="${job.share_link}" target="_blank">🔗 Apply Now</a></p>
         </div>
-      `
-      )
+      `;
+      })
       .join("");
 
     await sendEmail(htmlList);
